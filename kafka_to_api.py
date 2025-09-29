@@ -1,36 +1,35 @@
-import os, asyncio, json, ssl
+import os, asyncio, json, ssl, asyncpg
 from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from kafka import KafkaConsumer
-from motor.motor_asyncio import AsyncIOMotorClient
 
-# Configure using environment variables for connection security parameters
+# Configure: use environment variables for connection security parameters
 KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "osquery_logs")
 KAFKA_CA_FILE = os.getenv("KAFKA_CA_FILE")
 KAFKA_CERT_FILE = os.getenv("KAFKA_CERT_FILE")
 KAFKA_KEY_FILE = os.getenv("KAFKA_KEY_FILE")
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-MONGO_CA_FILE = os.getenv("MONGO_CA_FILE")
+# Supabase/PostgreSQL Configuration (Replacing MongoDB)
+# This should be your Supabase connection string (e.g., postgresql://user:pass@host:port/db)
+SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL", "postgresql://user:password@localhost:5432/postgres")
+# Certificate authority file for secure PostgreSQL connection (often needed for cloud databases)
+SUPABASE_CA_FILE = os.getenv("SUPABASE_CA_FILE")
+SUPABASE_TABLE_NAME = "host_telemetry"
 
-DB_NAME = "osquery_data"
-COLLECTION_NAME = "host_telemetry"
+# Supabase/PostgreSQL Connection Pool 
+db_pool: asyncpg.Pool | None = None
 
-db_client: AsyncIOMotorClient | None = None
-
-# Kafka Consumer + MongoDB Logic 
-async def consume_kafka_messages():
-    """Consumes messages from Kafka and saves them to MongoDB."""
-    
+# Kafka Consumer & Supabase Write Logic
+async def consume_kafka_messages():    
     # Configure Kafka TLS/SSL 
     kafka_consumer_args = {
         'bootstrap_servers': KAFKA_BROKER,
         'value_deserializer': lambda v: json.loads(v.decode('utf-8')),
         'auto_offset_reset': 'latest',
         'enable_auto_commit': True,
-        'group_id': 'fastapi-mongo-consumer',
+        'group_id': 'fastapi-supabase-consumer',
     }
     
     # If environment variables are set, add SSL parameters
@@ -38,56 +37,69 @@ async def consume_kafka_messages():
         kafka_consumer_args.update({
             'security_protocol': 'SSL',
             'ssl_context': ssl.create_default_context(cafile=KAFKA_CA_FILE),
-            'ssl_check_hostname': False,
+            'ssl_check_hostname': False, # Set to True in production if possible
             'ssl_certfile': KAFKA_CERT_FILE,
             'ssl_keyfile': KAFKA_KEY_FILE,
         })
     consumer = KafkaConsumer(KAFKA_TOPIC, **kafka_consumer_args)
     print("Starting Kafka consumer...")
 
-    if not db_client:
-        print("MongoDB client not initialized. Cannot save data.")
+    if not db_pool:
+        print("Database connection pool not initialized. Cannot save data.")
         return
-    db = db_client[DB_NAME]
-    collection = db[COLLECTION_NAME]
+
+    async with db_pool.acquire() as connection:
+        try:
+            await connection.execute(f"SELECT 1 FROM {SUPABASE_TABLE_NAME} LIMIT 1")
+        except asyncpg.exceptions.UndefinedTableError:
+            print(f"Warning: Table {SUPABASE_TABLE_NAME} does not exist. Please create it.")
+            return
 
     for message in consumer:
         try:
             osquery_log_entry = message.value
             osquery_log_entry['timestamp_processed'] = datetime.utcnow()
-            await collection.insert_one(osquery_log_entry)
+            data_json = json.dumps(osquery_log_entry)
+            async with db_pool.acquire() as connection:
+                await connection.execute(
+                    f"""
+                    INSERT INTO {SUPABASE_TABLE_NAME} (payload)
+                    VALUES ($1)
+                    """,
+                    data_json
+                )
             print(f"Successfully saved document from host: {osquery_log_entry.get('hostIdentifier')}")
         except Exception as e:
-            print(f"Error processing or saving message to MongoDB: {e}")
+            print(f"Error processing or saving message to Supabase: {e}")
 
 # Manage FastAPI App Lifecycle
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global db_client
-    print("Connecting to MongoDB...")
-    
-    # Configure MongoDB TLS/SSL 
-    mongodb_client_args = {
-        'uuidRepresentation': 'standard',
-    }
-    
-    # If configured for MongoDB, add ssl parameters
-    if MONGO_CA_FILE:
-        mongodb_client_args.update({
-            'ssl': True,
-            'ssl_ca_certs': MONGO_CA_FILE,
-        })
-    db_client = AsyncIOMotorClient(MONGO_URI, **mongodb_client_args)
-    print("MongoDB connection established.")
+    global db_pool
+    print("Connecting to Supabase (PostgreSQL)...")
+
+    # Configure Supabase/PostgreSQL TLS/SSL 
+    connect_args = {}
+    if SUPABASE_CA_FILE:
+        connect_args['ssl'] = ssl.create_default_context(cafile=SUPABASE_CA_FILE)
+        
+    # Initialize connection pool
+    db_pool = await asyncpg.create_pool(
+        SUPABASE_DB_URL,
+        min_size=1, 
+        max_size=10,
+        **connect_args
+    )
+    print("Supabase connection established.")
     
     # Kafka consumer starts as background task
     task = asyncio.create_task(consume_kafka_messages())
     yield
     
     # Shutdown cleans up resources
-    print("Closing MongoDB connection...")
-    db_client.close()
-    print("MongoDB connection closed.")
+    print("Closing Supabase connection pool...")
+    await db_pool.close()
+    print("Supabase connection closed.")
     task.cancel()
     try:
         await task
@@ -100,23 +112,31 @@ app = FastAPI(lifespan=lifespan)
 # API endpoints 
 @app.get("/telemetry")
 async def get_all_telemetry():
-    if not db_client:
+    """Retrieves the latest telemetry data from Supabase (PostgreSQL)."""
+    if not db_pool:
         raise HTTPException(status_code=503, detail="Database connection not available.")
     
-    db = db_client[DB_NAME]
-    collection = db[COLLECTION_NAME]
-    data = []
-    async for doc in collection.find().sort("timestamp_processed", -1).limit(100):
-        doc['_id'] = str(doc['_id'])
-        data.append(doc)
+    async with db_pool.acquire() as connection:
+        results = await connection.fetch(
+            f"""
+            SELECT * FROM {SUPABASE_TABLE_NAME}
+            ORDER BY timestamp_processed DESC
+            LIMIT 100
+            """
+        )
+    
+    data = [dict(record) for record in results]
     return {"telemetry_data": data}
 
 @app.get("/telemetry/count")
 async def get_telemetry_count():
-    if not db_client:
+    if not db_pool:
         raise HTTPException(status_code=503, detail="Database connection not available.")
     
-    db = db_client[DB_NAME]
-    collection = db[COLLECTION_NAME]
-    count = await collection.count_documents({})
+    async with db_pool.acquire() as connection:
+        count = await connection.fetchval(
+            f"""
+            SELECT COUNT(*) FROM {SUPABASE_TABLE_NAME}
+            """
+        )
     return {"count": count}
