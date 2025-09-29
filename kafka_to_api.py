@@ -3,8 +3,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from kafka import KafkaConsumer
+from dotenv import load_dotenv
 
 # Configure: use environment variables for connection security parameters
+load_dotenv()
 KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "osquery_logs")
 KAFKA_CA_FILE = os.getenv("KAFKA_CA_FILE")
