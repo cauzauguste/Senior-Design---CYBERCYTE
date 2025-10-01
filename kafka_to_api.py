@@ -13,7 +13,6 @@ KAFKA_CA_FILE = os.getenv("KAFKA_CA_FILE")
 KAFKA_CERT_FILE = os.getenv("KAFKA_CERT_FILE")
 KAFKA_KEY_FILE = os.getenv("KAFKA_KEY_FILE")
 
-# Supabase/PostgreSQL Configuration (Replacing MongoDB)
 # This should be your Supabase connection string (e.g., postgresql://user:pass@host:port/db)
 SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL", "postgresql://user:password@localhost:5432/postgres")
 # Certificate authority file for secure PostgreSQL connection (often needed for cloud databases)
