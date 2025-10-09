@@ -1,6 +1,11 @@
 from pydantic import BaseModel
+<<<<<<< HEAD
 from typing import Optional
 from datetime import datetime
+=======
+from datetime import datetime
+from typing import Optional
+>>>>>>> 5a941a1959ecf6e3d917b785491382061f7ea8a4
 
 class UserCreate(BaseModel):
     username: str
@@ -28,6 +33,7 @@ class EventCreate(BaseModel):
 class MonitoringCreate(BaseModel):
     metric_name: str
     metric_value: str
+<<<<<<< HEAD
 
 class GenerateEventRequest(BaseModel):
     timestamp: Optional[datetime] = None
@@ -42,3 +48,5 @@ class GenerateEventRequest(BaseModel):
 class MitigationRequest(BaseModel):
     event_id: int
     manual_override: bool = False
+=======
+>>>>>>> 5a941a1959ecf6e3d917b785491382061f7ea8a4
