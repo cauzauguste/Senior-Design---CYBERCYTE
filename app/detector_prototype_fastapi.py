@@ -1,6 +1,8 @@
+# detectpr_prototype_fastapi.py
 from fastapi import FastAPI
 from pydantic import BaseModel
 from app.threat_manager import log_threat_to_db
+from fastapi import status
 
 app = FastAPI()
 
@@ -19,3 +21,8 @@ def generate_event(event: GenerateEventRequest):
         event_text=event.event_text
     )
     return {"status": "ok", "event_id": logged_event.id}
+# --- Health endpoint for CI ---
+
+@app.get("/health", status_code=status.HTTP_200_OK)
+async def health():
+    return {"status": "ok"}
