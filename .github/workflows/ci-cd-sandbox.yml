@@ -1,0 +1,72 @@
+
+name: CI/CD (Sandbox)
+
+on:
+  push:
+    branches: [ ci-sandbox ]
+  workflow_dispatch:
+
+jobs:
+  test-build-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir -r requirements.txt
+
+      - name: Run tests with coverage (>=80% required)
+        run: |
+          pytest --maxfail=1 --disable-warnings --cov=app --cov-fail-under=80
+
+      - name: Set up gcloud auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: ">= 545.0.0"
+
+      - name: Configure gcloud
+        run: |
+          gcloud config set project "${{ secrets.GCP_PROJECT_ID }}"
+          gcloud config set run/region "${{ secrets.GCP_REGION }}"
+
+      - name: Enable services (idempotent)
+        run: |
+          gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com
+
+      - name: Build & Push image via Cloud Build
+        env:
+          IMAGE: "us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.AR_REPO }}/${{ secrets.SERVICE_NAME }}"
+        run: |
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          gcloud builds submit --tag "${IMAGE}:${COMMIT_SHA}"
+
+      - name: Deploy to Cloud Run (Sandbox)
+        env:
+          IMAGE: "us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.AR_REPO }}/${{ secrets.SERVICE_NAME }}"
+        run: |
+          COMMIT_SHA=$(git rev-parse --short HEAD)
+          gcloud run deploy "${{ secrets.SERVICE_NAME }}" \
+            --image "${IMAGE}:${COMMIT_SHA}" \
+            --allow-unauthenticated \
+            --port 8080
+
+      - name: Smoke check /health
+        run: |
+          URL=$(gcloud run services describe "${{ secrets.SERVICE_NAME }}" --format='value(status.url)')
+          echo "Service URL: $URL"
+          curl -fsS "$URL/health"
+
