@@ -1,0 +1,29 @@
+# tab1 
+
+with tabs[1]:
+    st.header("👥 Clients (Bryson Backend)")
+
+    # BRYSON_CLIENTS_URL = "http://34.172.159.200:8000/api/clients/status"
+    BRYSON_CLIENTS_URL = "http://34.172.159.200:8000/api/clients/status"
+    BRYSON_API_KEY = "a_very_strong_secret"   
+
+def fetch_clients_from_bryson():
+    try:
+        headers = {"X-API-Key": BRYSON_API_KEY}
+        r = requests.get(BRYSON_CLIENTS_URL, headers=headers, timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        st.error(f"Could not connect to Bryson backend: {e}")
+        return []
+
+    client_df = fetch_clients_from_bryson()
+
+    if client_df.empty:
+        st.info("No client data reported.")
+    else:
+        st.dataframe(client_df, use_container_width=True)
+
+        # Optional toast for new clients
+        if "client_name" in client_df.columns:
+            st.toast(f"✔ Loaded {len(client_df)} clients from Bryson!", icon="🔌")
