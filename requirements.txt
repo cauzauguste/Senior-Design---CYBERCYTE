@@ -1,0 +1,6 @@
+fastapi 
+streamlit
+requests
+uvicorn
+altair
+pandas
