@@ -343,8 +343,8 @@ class PostgresIngester:
                     dns_data.get("id.orig_p"),
                     dns_data.get("id.resp_p"),
                     dns_data.get("query"),
-                    dns_data.get("qtype"),
-                    dns_data.get("rcode"),
+                    str(dns_data.get("qtype", "")),
+                    str(dns_data.get("rcode", "")),
                     dns_data.get("answers", []),
                     json.dumps(dns_data)
                 )
