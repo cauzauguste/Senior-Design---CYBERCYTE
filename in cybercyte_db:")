@@ -1,0 +1,23 @@
+                                           Table "public.zeek_connections"
+      Column      |            Type             | Collation | Nullable |                   Default                    
+------------------+-----------------------------+-----------+----------+----------------------------------------------
+ id               | integer                     |           | not null | nextval('zeek_connections_id_seq'::regclass)
+ timestamp        | timestamp without time zone |           | not null | CURRENT_TIMESTAMP
+ uid              | character varying(50)       |           |          | 
+ source_ip        | inet                        |           | not null | 
+ dest_ip          | inet                        |           | not null | 
+ source_port      | integer                     |           | not null | 
+ dest_port        | integer                     |           | not null | 
+ protocol         | character varying(10)       |           | not null | 
+ duration         | interval                    |           |          | 
+ bytes_sent       | bigint                      |           |          | 0
+ bytes_received   | bigint                      |           |          | 0
+ connection_state | character varying(20)       |           |          | 
+ raw_data         | jsonb                       |           | not null | 
+ created_at       | timestamp without time zone |           |          | CURRENT_TIMESTAMP
+Indexes:
+    "zeek_connections_pkey" PRIMARY KEY, btree (id)
+    "idx_zeek_conn_dest_ip" btree (dest_ip)
+    "idx_zeek_conn_source_ip" btree (source_ip)
+    "idx_zeek_conn_timestamp" btree ("timestamp")
+

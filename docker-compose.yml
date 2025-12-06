@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database - runs on a designated database VM
+  postgres:
+    image: postgres:15-alpine
+    container_name: cybercyte-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pass  # CHANGE THIS IN PRODUCTION!
+      POSTGRES_DB: cybercyte_db
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cybercyte-net
+    restart: unless-stopped
+
+  # FastAPI Application - main backend
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cybercyte-api
+    environment:
+      POSTGRES_URL: "postgresql://postgres:pass@postgres:5432/cybercyte_db"
+      KAFKA_BROKER: "${KAFKA_BROKER:-kafka:9092}"
+      KAFKA_TOPIC: "${KAFKA_TOPIC:-osquery_logs}"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cybercyte-net
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app/backend
+
+  # Zeek Log Reader - can run on Zeek sensor VM or same machine
+  # This service reads Zeek logs and writes to PostgreSQL
+  zeek-log-reader:
+    build:
+      context: .
+      dockerfile: Dockerfile.zeek-reader
+    container_name: cybercyte-zeek-reader
+    environment:
+      POSTGRES_URL: "postgresql://postgres:pass@postgres:5432/cybercyte_db"
+      ZEEK_LOG_DIR: "/zeek/logs/current"
+      ZEEK_PROCESSED_DIR: "/zeek/logs/processed"
+      ZEEK_POLL_INTERVAL: "10"
+      LOG_LEVEL: "INFO"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cybercyte-net
+    restart: unless-stopped
+    volumes:
+      # Mount Zeek log directory - adjust path as needed
+      # If Zeek is on another VM, use NFS or similar
+      - /opt/zeek/logs/current:/zeek/logs/current:ro
+      - /opt/zeek/logs/processed:/zeek/logs/processed
+      - ./backend/app/zeek_log_reader.py:/app/zeek_log_reader.py:ro
+
+  # Streamlit Dashboard (optional)
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: cybercyte-dashboard
+    environment:
+      POSTGRES_URL: "postgresql://postgres:pass@postgres:5432/cybercyte_db"
+    ports:
+      - "8501:8501"
+    depends_on:
+      - postgres
+    networks:
+      - cybercyte-net
+    restart: unless-stopped
+    volumes:
+      - ./cybercyte:/app/cybercyte
+
+volumes:
+  postgres_data:
+
+networks:
+  cybercyte-net:
+    driver: bridge

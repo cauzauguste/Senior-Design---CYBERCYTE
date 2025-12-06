@@ -1,0 +1,15 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the Zeek log reader application
+COPY backend/app/zeek_log_reader.py /app/
+
+# Run the Zeek log reader
+CMD ["python", "zeek_log_reader.py"]

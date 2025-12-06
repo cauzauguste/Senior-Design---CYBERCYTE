@@ -1,5 +1,5 @@
 from app.database import Base, engine
-from app.models import Event, RawLog
+import app.models  # Ensure all models are imported so metadata includes them
 
 Base.metadata.create_all(bind=engine)
 print("Tables created successfully!")
