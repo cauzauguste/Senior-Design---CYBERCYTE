@@ -2,13 +2,32 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from datetime import timedelta, datetime
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
+
+load_dotenv()
+
+# Database connection
+DATABASE_URL = os.getenv("DATABASE_URL")
+engine = create_engine(DATABASE_URL)
 
 # Helper functions
 @st.cache_data
 def load_data():
-    data = pd.read_csv("security_events.csv", parse_dates=["DATE", "timestamp"])    
-    data['DATE'] = pd.to_datetime(data['DATE'])
-    return data
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            SELECT id, threat_type as event_type, severity, source_ip, dest_ip, 
+                   details, timestamp, gemini_analysis, openai_analysis, status
+            FROM incidents 
+            ORDER BY timestamp DESC
+        """))
+        rows = result.fetchall()
+        data = [row._asdict() for row in rows]
+        df = pd.DataFrame(data)
+        df['DATE'] = pd.to_datetime(df['timestamp']).dt.date
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+        return df
 
 def create_metric_chart(df, column, color, chart_type, height=150, time_frame='Daily'):
     chart_data = df[[column]].copy()
@@ -43,15 +62,16 @@ def format_with_commas(number):
 df = load_data()
 
 # Sidebar filters
-max_date = df['DATE'].max().date()
-default_start_date = max_date - timedelta(days=30)
+max_date = df['DATE'].max()
+min_date = df['DATE'].min()
+default_start_date = max(min_date, max_date - timedelta(days=30))
 default_end_date = max_date
-start_date = st.date_input("Start date", default_start_date, min_value=df['DATE'].min().date(), max_value=max_date)
-end_date = st.date_input("End date", default_end_date, min_value=df['DATE'].min().date(), max_value=max_date)
+start_date = st.date_input("Start date", default_start_date, min_value=min_date, max_value=max_date)
+end_date = st.date_input("End date", default_end_date, min_value=min_date, max_value=max_date)
 chart_selection = st.selectbox("Select a chart type", ("Bar", "Area"))
 
 # Filter data based on date selection
-filtered_df = df[(df['DATE'] >= pd.to_datetime(start_date)) & (df['DATE'] <= pd.to_datetime(end_date))]
+filtered_df = df[(df['DATE'] >= start_date) & (df['DATE'] <= end_date)]
 
 # --- EVENTS OVER TIME ---
 st.subheader("Events Over Time")
@@ -84,10 +104,18 @@ st.altair_chart(bar_chart, use_container_width=True)
 
 # --- LIVE INCIDENT TABLE ---
 st.subheader("Recent Incidents")
+recent_incidents = filtered_df.sort_values("timestamp", ascending=False).head(20)
 st.dataframe(
-    filtered_df.sort_values("timestamp", ascending=False).head(20),
+    recent_incidents[['timestamp', 'event_type', 'severity', 'source_ip', 'dest_ip', 'status']],
     use_container_width=True
 )
+
+# Show details for each incident
+for idx, row in recent_incidents.iterrows():
+    with st.expander(f"{row['event_type']} - {row['timestamp']}"):
+        st.write(f"**Description:** {row.get('details', 'N/A')}")
+        st.write(f"**Gemini Analysis:** {row.get('gemini_analysis', 'N/A')}")
+        st.write(f"**OpenAI Analysis:** {row.get('openai_analysis', 'N/A')}")
 
 # import streamlit as st
 # import pandas as pd

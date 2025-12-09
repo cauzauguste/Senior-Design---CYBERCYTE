@@ -19,7 +19,7 @@ class RawLogResponse(BaseModel):
     processed: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class GenerateEventRequest(BaseModel):
@@ -47,7 +47,7 @@ class Event(EventBase):
     timestamp: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # ---------- Zeek Event schemas ----------
@@ -69,7 +69,7 @@ class ZeekEventSchema(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ZeekConnectionSchema(BaseModel):
@@ -89,7 +89,7 @@ class ZeekConnectionSchema(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ZeekDNSSchema(BaseModel):
@@ -108,7 +108,7 @@ class ZeekDNSSchema(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ZeekFileSchema(BaseModel):
@@ -126,7 +126,7 @@ class ZeekFileSchema(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ZeekHTTPSchema(BaseModel):
@@ -147,7 +147,7 @@ class ZeekHTTPSchema(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ZeekSSLSchema(BaseModel):
@@ -168,4 +168,4 @@ class ZeekSSLSchema(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True

@@ -156,3 +156,18 @@ class ZeekSSL(Base):
     raw_data = Column(JSON, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
+class Incident(Base):
+    """Detected security incidents/threats."""
+    __tablename__ = "incidents"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    threat_type = Column(String(100), nullable=False)
+    severity = Column(String(20), nullable=False)
+    source_ip = Column(String(45))
+    dest_ip = Column(String(45))
+    details = Column(JSON, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    status = Column(String(20), default="open")  # open, resolved, false_positive
+    created_at = Column(DateTime, default=datetime.utcnow)
+

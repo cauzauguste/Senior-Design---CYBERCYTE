@@ -5,6 +5,10 @@ import os
 import logging
 from asyncio import to_thread
 from sqlalchemy import text
+from dotenv import load_dotenv
+
+# Load environment variables from conf.env
+load_dotenv('conf.env')
 
 # Import database engine for startup checks
 from backend.app import database

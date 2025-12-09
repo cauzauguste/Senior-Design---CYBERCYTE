@@ -3,6 +3,10 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from app.threat_manager import log_threat_to_db
 from fastapi import status
+from dotenv import load_dotenv
+
+# Load environment variables from conf.env
+load_dotenv('conf.env')
 
 app = FastAPI()
 

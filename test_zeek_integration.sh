@@ -16,7 +16,7 @@
 
 set -e
 
-ZEEK_VM="34.59.146.67"
+ZEEK_VM="34.63.246.217"
 ZEEK_USER="zauguste52"
 ZEEK_SSH_KEY="/home/zauguste52/.ssh/id_ed25519"
 POSTGRES_VM="34.132.194.35"

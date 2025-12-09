@@ -1,9 +1,13 @@
 import streamlit as st
+from dotenv import load_dotenv
+
+# Load environment variables from conf.env
+load_dotenv('../conf.env')
 
 st.set_page_config(page_title="CyberCyte - Home", layout="wide")
 
 # Logo + Title
-st.image("images/cybercyte_logo.png", width=750)
+# st.image("images/cybercyte_logo.png", width=750)
 st.title("🛡️ CyberCyte: Autonomous Home Defense System")
 
 # Intro section

@@ -18,6 +18,10 @@ Environment Variables:
 import os
 import sys
 import asyncio
+from dotenv import load_dotenv
+
+# Load environment variables from conf.env
+load_dotenv('conf.env')
 import json
 import logging
 from pathlib import Path
@@ -54,12 +58,12 @@ logger = logging.getLogger(__name__)
 # Configuration
 POSTGRES_URL = os.getenv(
     "POSTGRES_URL",
-    "postgresql://postgres:pass@localhost:5432/cybercyte_db"
+    "postgresql://postgres:pass@localhost:5432/postgres"
 )
 print(f"DEBUG: POSTGRES_URL from env: {os.getenv('POSTGRES_URL')}")
 print(f"DEBUG: Using POSTGRES_URL: {POSTGRES_URL}")
 ZEEK_LOG_DIR = os.getenv("ZEEK_LOG_DIR", "/opt/zeek/logs/current")
-ZEEK_PROCESSED_DIR = os.getenv("ZEEK_PROCESSED_DIR", "/opt/zeek/logs/processed")
+ZEEK_PROCESSED_DIR = os.getenv("ZEEK_PROCESSED_DIR", "/home/zauguste52/zeek_processed")
 POLL_INTERVAL = int(os.getenv("ZEEK_POLL_INTERVAL", "10"))
 
 db_pool: Optional[asyncpg.Pool] = None
@@ -105,6 +109,7 @@ async def init_db():
             source_port INTEGER NOT NULL,
             dest_port INTEGER NOT NULL,
             protocol VARCHAR(10) NOT NULL,
+            duration INTERVAL,
             bytes_sent BIGINT DEFAULT 0,
             bytes_received BIGINT DEFAULT 0,
             connection_state VARCHAR(20),
@@ -132,6 +137,47 @@ async def init_db():
         
         CREATE INDEX IF NOT EXISTS idx_dns_timestamp ON zeek_dns(timestamp);
         CREATE INDEX IF NOT EXISTS idx_dns_query ON zeek_dns(query);
+        
+        CREATE TABLE IF NOT EXISTS zeek_http (
+            id SERIAL PRIMARY KEY,
+            timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            uid VARCHAR(50),
+            source_ip INET NOT NULL,
+            dest_ip INET NOT NULL,
+            source_port INTEGER,
+            dest_port INTEGER,
+            method VARCHAR(10),
+            uri TEXT,
+            referrer TEXT,
+            user_agent TEXT,
+            status_code INTEGER,
+            response_body_size INTEGER,
+            raw_data JSONB NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_http_timestamp ON zeek_http(timestamp);
+        
+        CREATE TABLE IF NOT EXISTS zeek_ssl (
+            id SERIAL PRIMARY KEY,
+            timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            uid VARCHAR(50),
+            source_ip INET NOT NULL,
+            dest_ip INET NOT NULL,
+            source_port INTEGER,
+            dest_port INTEGER,
+            version VARCHAR(20),
+            cipher VARCHAR(100),
+            server_name VARCHAR(255),
+            subject TEXT,
+            issuer TEXT,
+            established BOOLEAN,
+            raw_data JSONB NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_ssl_timestamp ON zeek_ssl(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_ssl_server_name ON zeek_ssl(server_name);
         """
         
         async with db_pool.acquire() as conn:
@@ -178,15 +224,16 @@ async def insert_connection(data: Dict):
         async with db_pool.acquire() as conn:
             await conn.execute(
                 """INSERT INTO zeek_connections
-                   (uid, source_ip, dest_ip, source_port, dest_port, protocol,
+                   (uid, source_ip, dest_ip, source_port, dest_port, protocol, duration,
                     bytes_sent, bytes_received, connection_state, raw_data)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)""",
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)""",
                 data.get("uid"),
                 data.get("id.orig_h"),
                 data.get("id.resp_h"),
                 data.get("id.orig_p"),
                 data.get("id.resp_p"),
                 data.get("proto"),
+                data.get("duration"),
                 data.get("orig_bytes", 0),
                 data.get("resp_bytes", 0),
                 data.get("conn_state"),
@@ -223,6 +270,62 @@ async def insert_dns(data: Dict):
         logger.warning(f"Failed to insert DNS: {e}")
 
 
+async def insert_http(data: Dict):
+    """Insert an HTTP event."""
+    if not db_pool:
+        return
+    
+    try:
+        async with db_pool.acquire() as conn:
+            await conn.execute(
+                """INSERT INTO zeek_http
+                   (uid, source_ip, dest_ip, source_port, dest_port, method, uri, referrer, user_agent, status_code, response_body_size, raw_data)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)""",
+                data.get("uid"),
+                data.get("id.orig_h"),
+                data.get("id.resp_h"),
+                data.get("id.orig_p"),
+                data.get("id.resp_p"),
+                data.get("method"),
+                data.get("uri"),
+                data.get("referrer"),
+                data.get("user_agent"),
+                data.get("status_code"),
+                data.get("response_body_len"),
+                json.dumps(data)
+            )
+    except Exception as e:
+        logger.warning(f"Failed to insert HTTP: {e}")
+
+
+async def insert_ssl(data: Dict):
+    """Insert an SSL event."""
+    if not db_pool:
+        return
+    
+    try:
+        async with db_pool.acquire() as conn:
+            await conn.execute(
+                """INSERT INTO zeek_ssl
+                   (uid, source_ip, dest_ip, source_port, dest_port, version, cipher, server_name, subject, issuer, established, raw_data)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)""",
+                data.get("uid"),
+                data.get("id.orig_h"),
+                data.get("id.resp_h"),
+                data.get("id.orig_p"),
+                data.get("id.resp_p"),
+                data.get("version"),
+                data.get("cipher"),
+                data.get("server_name"),
+                data.get("subject"),
+                data.get("issuer"),
+                data.get("established"),
+                json.dumps(data)
+            )
+    except Exception as e:
+        logger.warning(f"Failed to insert SSL: {e}")
+
+
 async def process_file(file_path: Path):
     """Process a Zeek log file."""
     logger.info(f"Processing: {file_path.name}")
@@ -247,6 +350,10 @@ async def process_file(file_path: Path):
                     await insert_connection(data)
                 elif log_type == "dns":
                     await insert_dns(data)
+                elif log_type == "http":
+                    await insert_http(data)
+                elif log_type == "ssl":
+                    await insert_ssl(data)
                 else:
                     await insert_event(log_type, data)
                 
@@ -258,8 +365,14 @@ async def process_file(file_path: Path):
         if ZEEK_PROCESSED_DIR:
             os.makedirs(ZEEK_PROCESSED_DIR, exist_ok=True)
             dest = Path(ZEEK_PROCESSED_DIR) / file_path.name
-            file_path.rename(dest)
-            logger.debug(f"Moved to: {dest}")
+            try:
+                file_path.rename(dest)
+                logger.debug(f"Moved to: {dest}")
+            except PermissionError:
+                # If can't move, copy instead
+                import shutil
+                shutil.copy2(file_path, dest)
+                logger.debug(f"Copied to: {dest} (could not move due to permissions)")
     
     except Exception as e:
         logger.error(f"Error processing {file_path}: {e}")

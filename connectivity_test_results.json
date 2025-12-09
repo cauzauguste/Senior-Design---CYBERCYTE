@@ -1,9 +1,9 @@
 {
-  "timestamp": "2025-12-06T08:22:21.380165",
+  "timestamp": "2025-12-08T04:59:30.079853",
   "fastapi": {
     "status": "ok",
     "details": {
-      "ZEEK_REMOTE_HOST": "34.59.146.67",
+      "ZEEK_REMOTE_HOST": "34.63.246.217",
       "ZEEK_REMOTE_USER": "zauguste52",
       "ZEEK_REMOTE_PATH": "/opt/zeek/logs/current",
       "POSTGRES_URL": "postgresql://postgres:****@34.132.194.35:5432/postgres",
@@ -16,11 +16,23 @@
     }
   },
   "zeek_vm": {
-    "host": "34.59.146.67",
+    "host": "34.63.246.217",
     "port": 22,
-    "status": "failed",
+    "status": "connected",
     "details": {
-      "error": "SSH error: unpack requires a buffer of 4 bytes"
+      "remote_path_accessible": true,
+      "total_files_in_path": 32,
+      "zeek_log_files": [
+        "stdout.log",
+        "capture_loss.log",
+        "notice.log",
+        "stats.log",
+        "ssh.log",
+        "conn.log",
+        "stderr.log",
+        "telemetry.log"
+      ],
+      "log_file_count": 8
     }
   },
   "postgres_vm": {
@@ -32,10 +44,13 @@
       "version": "PostgreSQL 15.14 (Debian 15.14-0+deb12u1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
       "zeek_tables": [
         "zeek_conn",
+        "zeek_http",
+        "zeek_ssl",
+        "zeek_events",
         "zeek_dns",
-        "zeek_events"
+        "zeek_connections"
       ],
-      "zeek_tables_count": 3
+      "zeek_tables_count": 6
     }
   }
 }

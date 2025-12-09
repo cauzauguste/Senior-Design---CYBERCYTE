@@ -4,7 +4,7 @@ Cybercyte VM Connectivity Test Script
 
 Tests connectivity between:
 - FastAPI VM (34.170.121.14)
-- Zeek VM (35.222.249.202)
+- Zeek VM (34.63.246.217)
 - PostgreSQL VM (34.132.194.35)
 
 Usage:
@@ -101,7 +101,21 @@ async def test_zeek_ssh_connection() -> Dict[str, Any]:
         # Authenticate
         if ZEEK_SSH_KEY and os.path.exists(ZEEK_SSH_KEY):
             print_info(f"Using SSH key: {ZEEK_SSH_KEY}", 1)
-            key = paramiko.RSAKey.from_private_key_file(ZEEK_SSH_KEY)
+            # Try different key types
+            key = None
+            try:
+                key = paramiko.RSAKey.from_private_key_file(ZEEK_SSH_KEY)
+            except paramiko.ssh_exception.SSHException:
+                try:
+                    key = paramiko.Ed25519Key.from_private_key_file(ZEEK_SSH_KEY)
+                except paramiko.ssh_exception.SSHException:
+                    try:
+                        key = paramiko.ECDSAKey.from_private_key_file(ZEEK_SSH_KEY)
+                    except paramiko.ssh_exception.SSHException:
+                        try:
+                            key = paramiko.DSSKey.from_private_key_file(ZEEK_SSH_KEY)
+                        except paramiko.ssh_exception.SSHException:
+                            raise Exception("Unsupported SSH key type")
             transport.connect(username=ZEEK_REMOTE_USER, pkey=key)
         else:
             print_info(f"Using SSH password authentication", 1)
@@ -332,7 +346,7 @@ async def main():
     all_ok = all(r["status"] in ["connected", "ok"] for r in results.values() if isinstance(r, dict) and "status" in r)
     
     print(f"FastAPI local setup: {GREEN if results['fastapi']['status'] == 'ok' else RED}{results['fastapi']['status']}{RESET}")
-    print(f"Zeek VM (35.222.249.202): {GREEN if results['zeek_vm']['status'] == 'connected' else RED}{results['zeek_vm']['status']}{RESET}")
+    print(f"Zeek VM ({ZEEK_REMOTE_HOST}): {GREEN if results['zeek_vm']['status'] == 'connected' else RED}{results['zeek_vm']['status']}{RESET}")
     print(f"PostgreSQL VM (34.132.194.35): {GREEN if results['postgres_vm']['status'] == 'connected' else RED}{results['postgres_vm']['status']}{RESET}")
     
     print()

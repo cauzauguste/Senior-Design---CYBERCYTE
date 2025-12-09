@@ -8,6 +8,9 @@ COPY app/ app/
 # Copy requirement list
 COPY requirements.txt .
 
+# Copy environment configuration
+COPY conf.env .
+
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
