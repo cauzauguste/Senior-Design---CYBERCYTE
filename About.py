@@ -10,7 +10,6 @@ and real-time dashboards to simulate home defense against cyber threats.
 
 st.subheader("Team")
 st.markdown("""
-- Data Collector Engineer  - Ashley Saunders
 - Detector & Model Engineer - Theodora Ikeri
 - API & Backend Developer - Zion Auguste
 - Dashboard Developer - AuJanai Horton
